@@ -503,7 +503,8 @@ router.post('/add-user', authenticate, requireRole('dev'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid role' });
     }
 
-    if (role === 'admin' && email !== 'zzayir21@gmail.com') {
+    if (role === 'admin' && email !== 'zzayir21@gmail.com' && req.user.role !== 'dev') {
+      console.log(`[POST /add-user] Role 'admin' rejected for ${email} (Requested by ${req.user.email}) - Defaulting to student`);
       role = 'student';
     }
 
@@ -559,7 +560,8 @@ router.patch('/users/:id/role', authenticate, requireRole('dev'), async (req, re
     }
 
     // Admin email check (silently fallback to student if not allowed)
-    if (role === 'admin' && targetUser.email !== 'zzayir21@gmail.com') {
+    if (role === 'admin' && targetUser.email !== 'zzayir21@gmail.com' && req.user.role !== 'dev') {
+      console.log(`[PATCH /role] Role 'admin' rejected for ${targetUser.email} (Requested by ${req.user.email}) - Defaulting to student`);
       role = 'student';
     }
 
