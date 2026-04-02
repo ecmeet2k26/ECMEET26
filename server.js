@@ -53,6 +53,14 @@ app.all('/api/health', (req, res) => {
   });
 });
 
+app.all('/', (req, res) => {
+  if (req.method === 'HEAD') {
+    return res.status(200).end();
+  }
+
+  res.send("ECMEET'26 Backend Running 🚀");
+});
+
 // ─── Error Handler ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
