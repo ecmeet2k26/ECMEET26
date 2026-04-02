@@ -20,8 +20,22 @@ const PORT = process.env.PORT || 5000;
 socketIO.init(httpServer);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
+const allowedOrigins = [
+  'https://admin.ecmeet2k26.zylapse.com',
+  'https://ecmeet2k26.zylapse.com'
+];
+
 app.use(cors({
-  origin: (origin, callback) => callback(null, true), // allow all in dev
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like Postman, mobile apps, curl)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('❌ Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -44,7 +58,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
+app.all('/api/health', (req, res) => {
+  if (req.method === 'HEAD') {
+    return res.status(200).end(); // No body for HEAD
+  }
+
   res.json({
     status: 'OK',
     message: 'ECMEET\'26 Backend Running',
