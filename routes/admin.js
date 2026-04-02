@@ -314,6 +314,8 @@ router.get('/users', authenticate, requireRole('admin', 'dev', 'captain', 'coord
           return (b.hasLoggedIn ? 1 : 0) - (a.hasLoggedIn ? 1 : 0);
       }
     });
+
+    console.log(`[GET /users] mode=${mode} search=${search} team=${team} count=${allUsers.length}`);
     res.json({ users: allUsers, count: allUsers.length });
   } catch (err) {
     console.error('Users fetch error:', err);
@@ -529,6 +531,7 @@ router.post('/add-user', authenticate, requireRole('dev'), async (req, res) => {
       { $set: updateData },
       { new: true, upsert: true }
     );
+    console.log(`[POST /add-user] Account ${email} set to role ${role}`);
 
     socketIO.getIO().emit('data-updated', { type: 'USER_ADDED', email });
 
