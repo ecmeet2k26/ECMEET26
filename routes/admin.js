@@ -276,8 +276,21 @@ router.get('/users', authenticate, requireRole('admin', 'dev', 'captain', 'coord
       ]);
     }
 
-    // Combine and Sort
-    const allUsers = [...staffRecords, ...studentRecords].sort((a,b) => {
+    // Step 3: Combine & Deduplicate by Email (Staff records override static Student records)
+    const combined = new Map();
+    [...studentRecords, ...staffRecords].forEach(u => {
+      if (!u.email) return;
+      const email = u.email.toLowerCase();
+      const existing = combined.get(email);
+      if (existing) {
+        // Merge preferring staff data (role !== student)
+        combined.set(email, { ...existing, ...u });
+      } else {
+        combined.set(email, u);
+      }
+    });
+
+    const allUsers = Array.from(combined.values()).sort((a,b) => {
       if (mode === 'staff') return 0; // maintain default sort for staff
 
       switch (sortBy) {
