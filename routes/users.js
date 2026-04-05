@@ -87,8 +87,8 @@ router.get('/members/download', authenticate, async (req, res) => {
     const user = req.user;
     if (!user.team) return res.status(400).json({ error: 'No house assigned' });
 
-    // Fetch students in this team, sorted by dept
-    const students = await StudentData.find({ team: user.team }).sort({ dept: 1, studentName: 1 });
+    // Fetch students in this team, sorted by dept, section, then rrn
+    const students = await StudentData.find({ team: user.team }).sort({ dept: 1, section: 1, rrn: 1 });
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`${user.team} Members`);
