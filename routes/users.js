@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
+const StudentData = require('../models/StudentData');
+const ExcelJS = require('exceljs');
 
 // ─── Get My Profile ────────────────────────────────────────────────────────────
 router.get('/me', authenticate, (req, res) => {
@@ -76,6 +78,121 @@ router.post('/reveal-house', authenticate, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to reveal house' });
+  }
+});
+
+// ─── Download Team Members (Excel) ─────────────────────────────────────────────
+router.get('/members/download', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user.team) return res.status(400).json({ error: 'No house assigned' });
+
+    // Fetch students in this team, sorted by dept
+    const students = await StudentData.find({ team: user.team }).sort({ dept: 1, studentName: 1 });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`${user.team} Members`);
+
+    // Define columns
+    worksheet.columns = [
+      { header: 'S.No', key: 'sno', width: 8 },
+      { header: 'Student Name', key: 'name', width: 30 },
+      { header: 'RRN', key: 'rrn', width: 20 },
+      { header: 'Department', key: 'dept', width: 25 },
+      { header: 'Year', key: 'year', width: 12 },
+      { header: 'Section', key: 'section', width: 10 }
+    ];
+
+    // House-specific styling (optional - using gold for general ECMEET branding)
+    const headerColor = '1A1A1A'; // Deep Black
+    const textColor = 'C9A84C';   // Gold
+    
+    // Add data
+    students.forEach((s, i) => {
+      worksheet.addRow({
+        sno: i + 1,
+        name: s.studentName,
+        rrn: s.rrn,
+        dept: s.dept,
+        year: s.year,
+        section: s.section
+      });
+    });
+
+    // Styling: Headers
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: headerColor }
+      };
+      cell.font = {
+        name: 'Segoe UI',
+        bold: true,
+        color: { argb: 'FFFFFF' }, // White text on black
+        size: 11
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thick' },
+        right: { style: 'thin' }
+      };
+    });
+    headerRow.height = 30;
+
+    // Styling: Data Rows
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+
+      row.eachCell((cell, colNumber) => {
+        cell.font = { name: 'Segoe UI', size: 10 };
+        cell.alignment = { vertical: 'middle' };
+        
+        // Center S.No, RRN, Year, Section
+        if ([1, 3, 5, 6].includes(colNumber)) {
+          cell.alignment.horizontal = 'center';
+        }
+
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'E2E2E2' } },
+          left: { style: 'thin', color: { argb: 'E2E2E2' } },
+          bottom: { style: 'thin', color: { argb: 'E2E2E2' } },
+          right: { style: 'thin', color: { argb: 'E2E2E2' } }
+        };
+
+        // Zebra Striping
+        if (rowNumber % 2 === 0) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'F9F9F9' }
+          };
+        }
+      });
+      row.height = 25;
+    });
+
+    // Auto-adjust column widths based on content (Manual implementation)
+    worksheet.columns.forEach(column => {
+      let maxLen = column.header.length;
+      column.eachCell({ includeEmpty: false }, cell => {
+        const cellValue = cell.value ? cell.value.toString() : '';
+        maxLen = Math.max(maxLen, cellValue.length);
+      });
+      column.width = Math.min(Math.max(maxLen + 4, column.width || 10), 50);
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="ECMEET26_${user.team}_Members.xlsx"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ error: 'Failed to generate excel file' });
   }
 });
 
