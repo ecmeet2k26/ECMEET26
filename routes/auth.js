@@ -11,7 +11,7 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // ─── Google Sign-In ────────────────────────────────────────────────────────────
 router.post('/google', async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, source } = req.body;
     if (!credential) return res.status(400).json({ error: 'No credential provided' });
 
     // Verify Google token
@@ -21,19 +21,9 @@ router.post('/google', async (req, res) => {
     });
 
     const payload = ticket.getPayload();
-    const { sub: googleId, email, name: rawName, picture } = payload;
+    const { sub: googleId, email: rawEmail, name: rawName, picture } = payload;
     const name = rawName.replace(/\s*btech.*/i, '').trim();
-
-    // ── Domain Check ────────────────────────────────────────────────────────
-    const allowedDomain = process.env.ALLOWED_DOMAIN || 'crescent.education';
-    const isMasterAdmin = email.toLowerCase() === 'zzayir21@gmail.com';
-    
-    if (!email.endsWith(`@${allowedDomain}`) && !isMasterAdmin) {
-      return res.status(403).json({
-        error: 'ACCESS_DENIED',
-        message: `Only @${allowedDomain} email addresses are allowed. Please use your college email.`
-      });
-    }
+    const email = rawEmail.toLowerCase();
 
     // ── Check if Admin / Coordinator from config ─────────────────────────────
     let role = 'student';
@@ -45,17 +35,37 @@ router.post('/google', async (req, res) => {
       'zzayir21@gmail.com',
       '230171601108@crescent.education'
     ];
-    const isDevAccount = DEV_EMAILS.includes(email.toLowerCase());
+    const isDevAccount = DEV_EMAILS.includes(email);
 
     if (isDevAccount) role = 'dev';
     else if (adminEntry) role = adminEntry.role || 'admin';
     else if (coordEntry) role = 'coordinator';
 
+    // ── Check Database for existing elevated role ────────────────────────────
+    const existingUser = await User.findOne({ email });
+    if (existingUser && ['admin', 'coordinator', 'captain', 'dev'].includes(existingUser.role)) {
+      role = existingUser.role;
+    }
+
+    // ── Domain Check ────────────────────────────────────────────────────────
+    const allowedDomain = process.env.ALLOWED_DOMAIN || 'crescent.education';
+    const isMasterAdmin = email === 'zzayir21@gmail.com';
+    const isElevatedRole = ['admin', 'coordinator', 'captain', 'dev'].includes(role);
+    const isFromAdminPortal = source === 'admin';
+    
+    // Allow users with elevated roles to bypass the domain restriction ONLY on frontend-admin
+    if (!email.endsWith(`@${allowedDomain}`) && !isMasterAdmin && !(isElevatedRole && isFromAdminPortal)) {
+      return res.status(403).json({
+        error: 'ACCESS_DENIED',
+        message: `Only @${allowedDomain} email addresses are allowed for this portal.`
+      });
+    }
+
     // ── Look up StudentData ──────────────────────────────────────────────────
-    const studentData = await StudentData.findOne({ emailId: email.toLowerCase() });
+    const studentData = await StudentData.findOne({ emailId: email });
 
     // ── Block students not found in StudentData ──────────────────────────────
-    if (role === 'student' && !studentData && !isDevAccount) {
+    if (role === 'student' && !studentData && !(isElevatedRole && isFromAdminPortal)) {
       return res.status(403).json({
         error: 'NOT_REGISTERED',
         message: 'Your email is not registered for ECMEET\'26. Please contact the organizers.',
